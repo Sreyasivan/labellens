@@ -49,10 +49,16 @@ def fetch_labels(limit: int) -> list[dict]:
     return labels[:limit]
 
 
-def fetch_by_generic(generic_name: str) -> list[dict]:
-    """One label for a named drug, so the eval set is always covered."""
+def fetch_by_generic(generic_name: str, section: str | None = None) -> list[dict]:
+    """One label for a named drug that has the given section, so the eval set is always covered.
+    Without the section filter a drug like ciprofloxacin can come back as an eye drop with no boxed
+    warning while the question is about the tablets."""
     search = f'{BASE_SEARCH} AND openfda.generic_name:"{generic_name}"'
-    return fetch_page(search, 0, f"generic_{generic_name.lower().replace(' ', '_')}")[:1]
+    slug = generic_name.lower().replace(" ", "_")
+    if section:
+        search += f" AND _exists_:{section}"
+        slug += f"__{section}"
+    return fetch_page(search, 0, f"generic_{slug}")[:1]
 
 
 def split_text(text: str, max_chars: int = 1200, overlap: int = 150) -> list[str]:
@@ -126,11 +132,21 @@ def upsert_label(conn, label: dict) -> int:
     return len(chunks)
 
 
-def eval_generics(path: Path = config.ROOT / "eval" / "questions.jsonl") -> list[str]:
+def eval_requirements(path: Path = config.ROOT / "eval" / "questions.jsonl") -> list[tuple[str, str]]:
+    """Every (generic name, section) pair the question set asks about. None marks an off-topic question."""
     if not path.exists():
         return []
-    names = {json.loads(line).get("expected_generic_name") for line in path.read_text().splitlines() if line.strip()}
-    return sorted(n for n in names if n)  # None marks an out-of-scope question
+    pairs = set()
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        q = json.loads(line)
+        name, sections = q.get("expected_generic_name"), q.get("expected_section")
+        if not name:
+            continue
+        for section in sections if isinstance(sections, list) else [sections]:
+            pairs.add((name, section))
+    return sorted(pairs)
 
 
 def main() -> None:
@@ -141,8 +157,8 @@ def main() -> None:
 
     labels = [] if args.only_eval else fetch_labels(args.limit)
     seen = {l["set_id"] for l in labels}
-    for name in eval_generics():  # make sure every drug the eval asks about is indexed
-        for label in fetch_by_generic(name):
+    for name, section in eval_requirements():  # every (drug, section) the eval asks about is indexed
+        for label in fetch_by_generic(name, section):
             if label["set_id"] not in seen:
                 labels.append(label)
                 seen.add(label["set_id"])
