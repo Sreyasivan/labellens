@@ -1,0 +1,8 @@
+{"id": "q001", "author": "seed", "question": "What are the contraindications of metformin?", "expected_generic_name": "metformin", "expected_section": "contraindications", "must_mention": ["renal", "acidosis"]}
+{"id": "q002", "author": "seed", "question": "Does warfarin have a boxed warning?", "expected_generic_name": "warfarin", "expected_section": "boxed_warning", "must_mention": ["bleeding"]}
+{"id": "q003", "author": "seed", "question": "Why should lisinopril not be given during pregnancy?", "expected_generic_name": "lisinopril", "expected_section": "boxed_warning", "must_mention": ["fetal"]}
+{"id": "q004", "author": "seed", "question": "What muscle-related adverse reactions are reported for atorvastatin?", "expected_generic_name": "atorvastatin", "expected_section": "adverse_reactions", "must_mention": ["myalgia"]}
+{"id": "q005", "author": "seed", "question": "Who must not take amoxicillin?", "expected_generic_name": "amoxicillin", "expected_section": "contraindications", "must_mention": ["hypersensitivity"]}
+{"id": "q006", "author": "seed", "question": "What is the boxed warning for sertraline?", "expected_generic_name": "sertraline", "expected_section": "boxed_warning", "must_mention": ["suicidal"]}
+{"id": "q007", "author": "seed", "question": "Can levothyroxine be used for weight loss?", "expected_generic_name": "levothyroxine", "expected_section": "boxed_warning", "must_mention": ["obesity"]}
+{"id": "q008", "author": "seed", "question": "What drugs interact with clopidogrel?", "expected_generic_name": "clopidogrel", "expected_section": "drug_interactions", "must_mention": ["omeprazole"]}

@@ -1,0 +1,15 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: labellens-db
+    environment:
+      POSTGRES_DB: labellens
+      POSTGRES_USER: labellens
+      POSTGRES_PASSWORD: labellens
+    ports:
+      - "5433:5432"
+    volumes:
+      - labellens-pgdata:/var/lib/postgresql/data
+
+volumes:
+  labellens-pgdata:
