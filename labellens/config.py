@@ -40,8 +40,7 @@ SECTIONS = [
 MAX_DISTANCE = 0.55
 TOP_K = 5
 
-# Return at most one chunk per (drug, section) so a drug-specific question sees different sections
-# of that drug instead of the same passage from ten manufacturers. Candidate pool = TOP_K * DEDUPE_POOL.
-# Set False to measure the naive top-k; the README results table reports both.
-DEDUPE_BY_LABEL = True
-DEDUPE_POOL = 10
+# "hybrid" fuses dense + full-text search; "vector" is dense only (kept for the eval comparison).
+RETRIEVAL = os.getenv("RETRIEVAL", "hybrid")
+# Each retriever returns TOP_K * CANDIDATE_POOL candidates before fusion and (drug, section) dedupe.
+CANDIDATE_POOL = 10

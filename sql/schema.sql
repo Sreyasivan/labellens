@@ -24,3 +24,9 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_set_id_idx ON chunks (set_id);
+
+-- Full-text index for hybrid retrieval. Dense vectors miss exact terms ("boxed warning", a drug
+-- name); Postgres FTS catches them, so no separate BM25 library is needed.
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS tsv tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING gin (tsv);

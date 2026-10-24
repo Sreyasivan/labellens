@@ -15,8 +15,11 @@ ingest:           ## fetch ~2000 prescription labels from openFDA and embed them
 ask:              ## make ask Q="What are the contraindications of metformin?"
 	uv run python -m labellens.cli ask "$(Q)"
 
-eval:             ## run retrieval eval over eval/questions.jsonl
+eval:             ## retrieval eval over eval/questions.jsonl, all configs
 	uv run python eval/run_eval.py
 
 test:
 	uv run pytest -q
+
+eval-extract:     ## extraction eval on N real labels: make eval-extract N=15
+	uv run python eval/run_extract_eval.py --n $(or $(N),15)

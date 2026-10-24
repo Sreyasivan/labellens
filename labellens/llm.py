@@ -25,12 +25,14 @@ class Completion:
     model: str
 
 
-def chat(system: str, user: str, temperature: float = 0.0) -> Completion:
+def chat(system: str, user: str, temperature: float = 0.0, json_mode: bool = False) -> Completion:
     start = time.perf_counter()
+    extra = {"response_format": {"type": "json_object"}} if json_mode else {}
     resp = _get_client().chat.completions.create(
         model=config.LLM_MODEL,
         temperature=temperature,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        **extra,
     )
     usage = resp.usage
     return Completion(

@@ -10,4 +10,4 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --extra dev
       - run: uv run pytest -q
-  # Week 3: add a pgvector service, run `make eval`, and fail the job if recall drops below the README number.
+  # TODO: run `make eval` against a pgvector service and fail below the README recall number.
