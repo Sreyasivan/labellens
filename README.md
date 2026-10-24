@@ -3,11 +3,12 @@
 [![ci](https://github.com/Sreyasivan/labellens/actions/workflows/ci.yml/badge.svg)](https://github.com/Sreyasivan/labellens/actions/workflows/ci.yml)
 
 Ask a question about an FDA drug label and get an answer that cites the exact label section it came
-from. Pull a label's contraindications into a typed list. Measure both against the real labels,
-every time the code changes.
+from. Pull a label's contraindications, interactions or warnings into a typed list. Measure both
+against the real labels, every time the code changes. Use it from the command line, an HTTP API with
+generated docs, or a small web page.
 
-Runs entirely on a laptop with a free local model. Switch to a hosted model by changing three
-environment variables.
+Runs entirely on a laptop with a free local model and no accounts. Switch to OpenAI or Claude by
+changing environment variables; nothing else moves.
 
 ---
 
@@ -67,47 +68,80 @@ Output above is verbatim. Two of the five retrieved sources were other drugs' co
 used only the three metformin sources and said which ones. Hybrid retrieval, added after this run,
 pushes the drug name up the ranking.
 
-**Typed extraction.** Give it a label and get the contraindications back as a validated list
-(`pydantic`), ready for a database column instead of a paragraph of prose.
+**Typed extraction.** Give it a label and a section (contraindications, drug interactions, warnings)
+and get the items back as a validated list (`pydantic`), ready for a database column instead of a
+paragraph of prose. Each item is scored for whether its words actually occur in the section.
 
-**An evaluation harness that runs against the real data.** Retrieval recall per label section,
-extraction grounding and coverage, latency and token counts. The numbers below come from
+**An evaluation harness that runs against the real data.** Retrieval recall per label section, the
+full answer path (right drug cited, required terms present, citations valid, off-topic questions
+refused), extraction grounding and coverage, latency and token counts. The question set is itself
+checked against the label text before any of it runs. The numbers below come from
 `eval/results/*.json`; none of them are typed by hand.
 
 ## Results
 
-Index: 2,000 prescription labels, 56,686 section chunks. Model: `llama3.2` (3B) via Ollama on a laptop CPU.
+Index: 2,000 prescription labels, 56,686 section chunks. Model: `llama3.2` (3B) via Ollama on a laptop
+CPU. Question set: 58 questions in `eval/questions.jsonl`, 50 in scope across 9 label sections and 8
+off-topic, every in-scope one verified against the label text by `make check-questions`.
 
-**Retrieval** (recall@5 on the question set in `eval/questions.jsonl`):
+**Retrieval** (recall@5; an off-topic question counts as a hit only when it would be refused):
 
 | retrieval configuration | recall@5 |
 |---|---|
-| dense vectors, naive top-k | 6/8 |
-| dense vectors + one chunk per (drug, section) | 7/8 |
-| **hybrid dense + full-text, fused with RRF, + dedupe** | **8/8** |
+| dense vectors, naive top-k | 49/58 = 84% |
+| dense vectors + one chunk per (drug, section) | 54/58 = 93% |
+| **hybrid dense + full-text, fused with RRF, + dedupe** | **57/58 = 98%** |
 
-Each step fixed a specific failure. Naive top-k returned the same passage from five manufacturers'
-copies of the same label. Dense vectors alone ranked the sertraline *boxed warning* 24th for the
-question "What is the boxed warning for sertraline?", because embeddings blur exact terms that
-full-text search catches instantly.
+Per section with the hybrid configuration: boxed warning 20/20, contraindications 11/12, adverse
+reactions 7/7, drug interactions 5/5, dosage 2/2, overdosage 2/2, specific populations 1/1, warnings
+1/1, off-topic refused 8/8. The one miss is spironolactone's contraindications, outranked by its own
+interactions section and a combination product.
 
-**Extraction** (contraindications, 15 randomly sampled labels):
+Each step fixed a failure the eval exposed. Naive top-k returned the same passage from five
+manufacturers' copies of one label. Dense vectors ranked the sertraline *boxed warning* 24th because
+embeddings blur exact terms. Postgres' default full-text query ANDs every word, so "What does the boxed
+warning for lithium say?" matched nothing; ranking by the number of distinct matching terms fixed it.
+And the first scope threshold let 7 of 8 off-topic questions through; measuring the distance gap set it.
 
-| metric | result | meaning |
-|---|---|---|
-| grounding precision | 53/53 = 100% | no extracted item contained words that are not in the label section |
-| sentence coverage | 30/37 = 81% | share of section sentences represented in the extraction |
-| parse failures | 0/15 | every response was valid JSON matching the schema |
-| mean latency | 652 ms | per label, local 3B model |
+**Answers** (the full ask path on the same 58 questions):
 
-The 7 uncovered sentences are section headings, cross-references such as *(see WARNINGS)* and
-explanatory sentences, not missed contraindications. See [`eval/README.md`](eval/README.md) for
+| check | result |
+|---|---|
+| cited the right drug | 50/50 = 100% |
+| answer contains the required terms | 43/50 = 86% |
+| every `[n]` citation points at a source that was shown | 43/50 = 86% |
+| all three at once | 36/50 = 72% |
+| in-scope questions wrongly refused | 0 |
+| off-topic questions refused before the model | 8/8 = 100% |
+| latency p50 / p95 | 2.2 s / 3.2 s |
+| tokens per answer, prompt / completion (mean) | 1,569 / 67 |
+
+Retrieval and scope are not the bottleneck; the 3B model is. Its failures are of two kinds: it
+paraphrases past the required word ("suicidal thoughts and behaviours" becomes "mental health risks"),
+and it drops the `[n]` markers or cites the label's own section numbers instead. Tightening the
+prompt moved valid citations from 41 to 43 of 50. The next step is not more prompt work; it is the
+hosted-model rows on the roadmap, which the provider switch already supports.
+
+**Extraction** (15 randomly sampled labels per section):
+
+| section | grounding precision | sentence coverage | parse failures | mean latency |
+|---|---|---|---|---|
+| contraindications | 53/53 = 100% | 30/37 = 81% | 0/15 | 0.8 s |
+| drug interactions | 100/100 = 100% | 51/83 = 61% | 0/15 | 2.6 s |
+| warnings and cautions | 68/68 = 100% | 93/125 = 74% | 1/15 | 2.4 s |
+
+Nothing invented in 221 items. Coverage is lower on the longer sections because the model summarises
+tables and pharmacokinetic detail into one item per drug, and because headings and cross-references
+count as sentences. The one parse failure is a label (cocaine hydrochloride) whose section the model
+answered with truncated JSON; the output cap that ended it exists because an earlier run looped for
+189 KB. Before the parser accepted `{"drug": ..., "effect": ...}` objects as items, 10 of the 30
+interaction and warning extractions failed on shape alone. See [`eval/README.md`](eval/README.md) for
 exactly what these metrics can and cannot prove.
 
-**Caveat that matters:** 8 questions and 15 labels are small samples. They are large enough to catch
-the retrieval failures above and to show the extraction does not invent content; they are not large
-enough to quote as general accuracy figures. The harness is built so the sets can grow without
-changing any code.
+**Caveat that matters:** 58 questions and 15 labels per section are enough to catch the failures
+described above and to show that extraction does not invent content. They are not enough to quote as
+general accuracy figures, and the scope threshold was set on this same question set. The harness is
+built so the sets can grow without changing any code.
 
 ## How it works
 
@@ -125,6 +159,8 @@ question ──► dense top-50 ─┐
                                                                                   + fixed safety footer
 
 label section ──► LLM in JSON mode ──► pydantic model ──► scored against the section text
+
+CLI · HTTP API (FastAPI, /docs) · web page  ──► all call the same answer() and extract_items()
 ```
 
 Three guardrails, in order:
@@ -140,21 +176,47 @@ Three guardrails, in order:
 ## Quick start
 
 Requirements: Docker, Python 3.11+, [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com/).
+About 15 minutes the first time, most of it the model download and the embedding run.
 
 ```bash
 git clone https://github.com/Sreyasivan/labellens && cd labellens
 cp .env.example .env                 # defaults need no accounts
-ollama pull llama3.2
+ollama pull llama3.2                 # 2 GB, once
 
-make setup                           # install dependencies
+make setup                           # install dependencies into .venv
 make db                              # Postgres + pgvector in Docker, port 5433
-make schema
-make ingest                          # 2,000 labels from openFDA; cached in data/raw; embeds on CPU, ~10 min first run
+make schema                          # tables and indexes
+make ingest                          # 2,000 labels from openFDA; cached in data/raw; embeds on CPU, ~10 min
 
 make ask Q="Does warfarin have a boxed warning?"
-make eval                            # retrieval recall, all configurations
-make eval-extract N=15               # extraction grounding and coverage
-make test
+make api                             # http://localhost:8000  (web page) and /docs (API)
+```
+
+### Check it yourself
+
+Every number in this README comes from a command below. Run them and compare.
+
+```bash
+make test                            # 39 unit tests, no database or model needed, under 2 s
+make check-questions                 # every eval question verified against the indexed label text
+make eval                            # retrieval recall@5 for all three configurations
+make eval-answer                     # full ask path: citations, required terms, refusals, latency
+make eval-extract N=15 SECTION=contraindications     # also drug_interactions, warnings_and_cautions
+```
+
+What you should see: `make ask` prints an answer with `[n]` citations, a sources list with the drug,
+section and cosine distance of each, and a token/latency line. An off-topic question
+(`make ask Q="What is the capital of France?"`) is refused without calling the model. `make eval`
+prints the table under Results, plus a per-section breakdown and the top-3 chunks for every miss so a
+failure can be read, not guessed at. Results are also written to `eval/results/*.json`.
+
+To try the API without the page:
+
+```bash
+curl -s localhost:8000/ask -H 'content-type: application/json' \
+     -d '{"question": "What is the boxed warning for sertraline?"}' | python -m json.tool
+curl -s localhost:8000/extract -H 'content-type: application/json' \
+     -d '{"generic_name": "metformin", "section": "contraindications"}' | python -m json.tool
 ```
 
 ### Configuration
@@ -164,33 +226,48 @@ All settings are environment variables (see `.env.example`):
 | variable | default | notes |
 |---|---|---|
 | `DATABASE_URL` | local Docker Postgres | any Postgres with the `vector` extension, including Supabase |
-| `LLM_BASE_URL` | `http://localhost:11434/v1` | any OpenAI-compatible endpoint |
-| `LLM_API_KEY` | `ollama` | |
-| `LLM_MODEL` | `llama3.2` | |
+| `LLM_PROVIDER` | `openai_compatible` | or `anthropic` |
+| `LLM_BASE_URL` | `http://localhost:11434/v1` | any OpenAI-compatible endpoint: Ollama, OpenAI, vLLM, Groq |
+| `LLM_API_KEY` | `ollama` | the endpoint's key |
+| `LLM_MODEL` | `llama3.2` | `claude-opus-5-5` when the provider is `anthropic` |
+| `ANTHROPIC_API_KEY` | unset | read by the Anthropic SDK when `LLM_PROVIDER=anthropic` |
 | `RETRIEVAL` | `hybrid` | `vector` for dense only |
 | `OPENFDA_API_KEY` | empty | optional, raises the openFDA rate limit |
 
-To use a hosted model, point the three `LLM_*` variables at it. Nothing else changes, which is what
-makes a like-for-like cost and quality comparison possible.
+Three ways to run the model, all behind the same `chat()` function:
+
+| | set | needs |
+|---|---|---|
+| **Local (default)** | nothing | Ollama running; data never leaves the machine |
+| **OpenAI or compatible** | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | an API key |
+| **Claude** | `LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`, optionally `LLM_MODEL` | `uv sync --extra anthropic` |
+
+Retrieval, extraction and every eval are identical across the three, which is what makes a
+like-for-like quality and cost comparison possible: change the variables, run `make eval-answer`.
 
 ### Project layout
 
 ```
 labellens/
-  config.py    settings, indexed label sections, retrieval thresholds
-  ingest.py    openFDA fetch (cached), section chunking, embedding, upsert
-  embed.py     bge-small embeddings, loaded on first use
-  rag.py       dense + full-text retrieval, RRF, dedupe, scope check, cited answer
-  extract.py   JSON-mode extraction into a pydantic model
-  llm.py       one OpenAI-compatible client
-  cli.py       `ask` command
+  config.py        settings, indexed label sections, retrieval thresholds
+  ingest.py        openFDA fetch (cached, rate-limit aware), section chunking, embedding, upsert
+  embed.py         bge-small embeddings, loaded on first use
+  rag.py           dense + full-text retrieval, RRF, dedupe, scope check, cited answer
+  extract.py       JSON-mode extraction into a pydantic model, one rule per section
+  llm.py           chat() over an OpenAI-compatible endpoint or the Anthropic SDK
+  cli.py           `ask` command
+  api.py           FastAPI: POST /ask, POST /extract, GET /health, generated docs at /docs
+  static/index.html  the web page; plain HTML + fetch(), served by the API
 eval/
-  questions.jsonl        retrieval question set
-  run_eval.py            recall@k per retrieval configuration
-  run_extract_eval.py    extraction grounding and coverage on sampled labels
+  questions.jsonl        58 questions: 50 in scope, 8 off-topic for the refusal path
+  check_questions.py     verifies every question against the indexed label text; CI runs it first
+  run_eval.py            recall@5 per retrieval configuration; --min-recall is the CI gate
+  run_answer_eval.py     end-to-end: right drug cited, required terms present, citations valid, refusals, latency
+  run_extract_eval.py    extraction grounding and coverage on sampled labels, per section
   scoring.py             deterministic token-overlap scorer
 sql/schema.sql           tables, HNSW and GIN indexes
 tests/                   unit tests, no database or model required
+.github/workflows/ci.yml unit tests, then the retrieval gate against a real pgvector service
 ```
 
 ## Design decisions
@@ -211,6 +288,18 @@ understands exact terms. Drug questions are full of exact terms (drug names, "bo
 "QT prolongation"). RRF combines the two ranked lists without having to calibrate their scores against
 each other, which is the step that usually goes wrong in hybrid search.
 
+**Lexical search matches any term and ranks by how many terms matched.** Postgres' default query
+ANDs every word, so "What does the boxed warning for lithium say?" matched nothing because no label
+says "say". A plain OR query over-ranked long chunks that repeat one common word. Ranking by the
+number of distinct question terms a chunk contains, then by density, fixed both. The section name is
+part of the indexed text so "boxed warning" finds boxed-warning chunks, whose text starts with
+"WARNING:" and never contains the word "boxed".
+
+**The scope threshold was measured, not guessed.** On the 58-question set the nearest chunk for an
+in-scope question is never further than 0.32 cosine distance, and for an off-topic question never
+nearer than 0.39. The threshold is 0.35. The first value, 0.55, let 7 of 8 off-topic questions through;
+the eval caught it the day the off-topic questions were added.
+
 **One chunk per (drug, section).** Generic drugs have many manufacturers and nearly identical labels.
 Without dedupe the top-5 was the same paragraph five times, and the eval showed it immediately.
 
@@ -222,20 +311,48 @@ embeds 56k chunks in minutes. A 3B local model answers in under a second for ext
 seconds for Q&A. Label text never has to leave the machine, which is a hard requirement in parts of
 this industry, and it makes the project reproducible for anyone without an API key.
 
-**No orchestration framework.** The whole pipeline is about 400 lines of plain Python and SQL. Every
+**No orchestration framework.** The whole pipeline is about 500 lines of plain Python and SQL. Every
 step is visible, every prompt is in the repo, and there is nothing between the code and the behaviour
 that would need to be debugged through someone else's abstraction.
+
+**An API with a plain web page, not a notebook-style UI.** Streamlit and Gradio get to a demo fastest,
+but they rerun a script per click, hold state awkwardly, and the result is a demo, not a service. Here
+the UI is a client of a typed FastAPI service: the same functions serve the CLI, the evals, the API and
+the page; the API documents itself at `/docs`; and it is tested in CI with FastAPI's test client. The
+page is one HTML file with `fetch()`, no build step. Chainlit was ruled out as chat-only, Reflex and
+NiceGUI as more framework than the two forms need.
+
+**One provider switch, two client libraries.** Ollama, OpenAI, vLLM and Groq all speak the OpenAI
+chat API, so one client covers them. Claude is called through the official Anthropic SDK instead of a
+compatibility shim, so its own features work (server-side refusal fallback is on by default). Both
+return the same `Completion`, so the rest of the code does not know which one ran.
 
 **The eval drives the data.** Every drug named in `eval/questions.jsonl` is guaranteed to be ingested,
 so a retrieval miss is always a retrieval problem, never a coverage problem.
 
 ## FAQ
 
-**Why not just ask ChatGPT or Claude about the drug?**
-They answer from training data, not from the current approved label, they do not cite, and they cannot
-tell you *which manufacturer's label, which version, which section*. For a casual question that is
-fine. For a pharmacist documenting a response, it is not an answer at all. LabelLens uses a model only
-as a reader of retrieved text, never as a source of facts.
+**Why not just ask ChatGPT or Claude about the drug? They can search the web now.**
+For a one-off question from a consumer, they are good enough, and this project does not try to beat
+them there. The gap is everything a team needs around the answer:
+
+- *Pinned source.* A web search returns whichever page ranks that day: DailyMed, a manufacturer PDF,
+  Drugs.com, a forum. LabelLens answers from one known set of FDA-approved labels, and says which
+  label and which section. In a regulated setting "a web page" is not a citable source; the current
+  Prescribing Information is.
+- *Reproducible and testable.* Ask a chatbot the same question next week and the sources, the answer
+  and the wording change. Here the same 58 questions run on every commit and produce the same recall
+  number, so a change that breaks retrieval fails CI instead of being noticed by a user.
+- *Data stays in-house.* The question often carries context (a patient's other medicines, a renal
+  value). Many pharma and hospital IT policies do not allow that text to leave the organisation.
+  The default setup runs the model on the machine that holds the labels.
+- *Batch, not chat.* "Extract the contraindications of all 2,000 labels into one table" is a job, not a
+  conversation. The extraction path here is a function with a schema and a grounding score.
+- *Cost and control.* A 3B model on a CPU answers in about a second for free. Hosted models are a
+  three-variable switch when their quality is worth paying for; the eval shows whether it is.
+
+The honest summary: a chatbot with web search is a better general assistant. LabelLens is a narrow,
+measured, auditable component that a team could put behind a form or a pipeline.
 
 **Can I use the OpenAI or Anthropic API instead of a local model?**
 Yes: set `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL`. Any OpenAI-compatible endpoint works. The
@@ -275,30 +392,52 @@ No. It summarises label text and says where it came from. Every answer carries t
 in code so the model cannot leave it out.
 
 **How do I add a drug or a question?**
-Add a line to `eval/questions.jsonl` with the drug's generic name and the section that answers it, then
-run `make ingest` (it fetches any drug named in the eval set that is not yet indexed) and `make eval`.
+Add a line to `eval/questions.jsonl` with the drug's generic name, the section that answers it and the
+words a correct answer must contain. Run `uv run python -m labellens.ingest --only-eval` (fetches any
+eval drug not yet indexed), `make check-questions` (proves the label actually says what the question
+assumes) and `make eval`. A question that fails the check is wrong about the label and is not an eval
+case until fixed.
+
+**Why FastAPI and a plain HTML page rather than Streamlit or Gradio?**
+See Design decisions. Short version: the UI should be a client of the same API a pipeline would call,
+and both should be testable without a browser. Streamlit or Gradio would have been a one-afternoon
+front end on an untested service.
+
+**Why does CI index only the eval drugs?**
+Embedding 2,000 labels on a CI runner would take long enough that nobody would wait for it. The gate
+indexes the ~40 drugs the questions name (about 1,600 chunks, a few minutes), verifies every question
+against the label text, and fails if hybrid recall@5 drops below 90%. The headline numbers come from
+the full index and are reproduced with `make eval`.
 
 ## Limitations
 
 - US labels only. The EU equivalent (SmPC) has a different structure and is not indexed.
 - openFDA mirrors labels with some delay; a very recent label change may not be reflected.
-- The scope check is a single distance threshold tuned on the current question set.
-- Extraction covers one section (contraindications). The pattern extends to others; the scoring does too.
-- Sample sizes in the results table are small. See the caveat under Results.
+- The scope check is a single distance threshold. It separates the current question set cleanly, but
+  an off-topic question that happens to use clinical vocabulary ("what is the boiling point of
+  ethanol" came within 0.04 of it) could pass. A second signal is on the roadmap.
+- `must_mention` checks that the answer contains the right words; it does not prove the sentence
+  around them is correct. A judged faithfulness score is the next step.
+- Extraction covers three sections. Others follow the same one-line pattern.
+- 58 questions and 15 labels per section are enough to catch the failures described here, not enough to
+  quote as general accuracy figures. See the caveat under Results.
 
 ## Roadmap
 
 In order of what the evaluation says matters most:
 
-1. **Answer faithfulness.** Judge whether each cited claim is supported by its cited chunk, so the
-   Q&A side gets a grounding number like the extraction side already has.
-2. **Larger question set.** 100 hand-verified questions, including out-of-scope ones for the refusal path.
-3. **Extraction for more sections.** Boxed warning present/absent, dosage adjustments by renal function,
-   drug-interaction pairs.
-4. **Eval in CI.** Run `make eval` against a pgvector service on every pull request and fail below the
-   current numbers.
-5. **Hosted-model comparison row.** Same eval, same questions, hosted model, with cost per query.
-6. **A small web UI** over the existing functions, once the numbers above are in place.
+1. **Judged faithfulness.** The answer eval checks words; a judge model comparing each cited sentence
+   with its cited chunk would score meaning. Its rubric would live in the repo and be evaluated itself
+   on a hand-labelled sample before its number is trusted.
+2. **Question set to 100**, with more questions per section and more off-topic questions that use
+   clinical vocabulary, which is where the distance threshold is weakest.
+3. **Hosted-model rows.** Same 58 questions on Claude and on an OpenAI model, with cost per query, next
+   to the local 3B row. The switch exists; the table does not yet.
+4. **Second scope signal**, for example requiring at least one lexical match on a drug name or
+   section term, to back up the distance threshold.
+5. **Extraction for dosage and renal adjustment**, where the output is numeric and can be checked
+   exactly.
+6. **A deployed instance** behind the existing API, once a hosted embedding store is chosen.
 
 Out of scope by design: agents and multi-step tool use (one question, one retrieval, one answer covers the
 job), fine-tuning (see FAQ), and a separate vector database (see Design decisions).

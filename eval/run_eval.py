@@ -1,8 +1,10 @@
 """Retrieval eval: for each question, is the right drug + section among the top-k chunks?
 
 Runs every retrieval config so the README table compares them on the same questions.
-Answer faithfulness (LLM-judged) is the next metric to add on top of this.
+Out-of-scope questions (no expected drug) count as a hit when the scope check would refuse them.
+With --min-recall it doubles as the CI gate. The end-to-end answer eval is run_answer_eval.py.
 """
+import argparse
 import json
 import sys
 from collections import defaultdict
@@ -27,11 +29,20 @@ def load_questions() -> list[dict]:
     return [json.loads(line) for line in QUESTIONS.read_text().splitlines() if line.strip()]
 
 
+def wanted_sections(q: dict) -> set[str] | None:
+    """expected_section may be one name or a list: old- and new-format labels put the same fact in
+    different sections (e.g. metformin + contrast media: contraindications vs warnings_and_cautions)."""
+    want = q.get("expected_section")
+    if want is None:
+        return None
+    return set(want) if isinstance(want, list) else {want}
+
+
 def is_hit(q: dict, chunks: list[rag.Chunk]) -> bool:
     want_drug = (q.get("expected_generic_name") or "").lower()
-    want_section = q.get("expected_section")
+    sections = wanted_sections(q)
     return any(
-        want_drug in (c.generic_name or "").lower() and (want_section is None or c.section == want_section)
+        want_drug in (c.generic_name or "").lower() and (sections is None or c.section in sections)
         for c in chunks
     )
 
@@ -41,7 +52,7 @@ def run_config(questions: list[dict], mode: str, dedupe: bool) -> dict:
     for q in questions:
         chunks = rag.retrieve(q["question"], k=config.TOP_K, mode=mode, dedupe_results=dedupe)
         if q.get("expected_generic_name"):
-            hit, section = is_hit(q, chunks), q.get("expected_section") or "any"
+            hit, section = is_hit(q, chunks), "/".join(sorted(wanted_sections(q) or ["any"]))
         else:  # out-of-scope question: a hit means we would refuse
             hit, section = not rag.in_scope(chunks), "out_of_scope"
         by_section[section][0] += int(hit)
@@ -52,6 +63,10 @@ def run_config(questions: list[dict], mode: str, dedupe: bool) -> dict:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--min-recall", type=float, default=None, help="exit 1 if hybrid recall is below this (CI gate)")
+    args = parser.parse_args()
+
     questions = load_questions()
     results = {name: run_config(questions, *cfg) for name, cfg in CONFIGS.items()}
 
@@ -69,6 +84,11 @@ def main() -> None:
 
     RESULTS.parent.mkdir(exist_ok=True)
     RESULTS.write_text(json.dumps({"k": config.TOP_K, "configs": results}, indent=2))
+
+    recall = best["hits"] / best["n"]
+    if args.min_recall is not None and recall < args.min_recall:
+        print(f"\nFAIL: hybrid recall {recall:.0%} is below the gate of {args.min_recall:.0%}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

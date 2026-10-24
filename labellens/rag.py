@@ -2,8 +2,8 @@
 
 Retrieval, in order:
 1. Dense: nearest chunks by cosine distance on bge-small embeddings.
-2. Lexical (hybrid mode): Postgres full-text search on the same chunks. Catches exact terms
-   that embeddings blur: drug names, "boxed warning", "eGFR".
+2. Lexical (hybrid mode): Postgres full-text search on the same chunks, any-term match ranked by
+   how many terms hit. Catches exact terms that embeddings blur: drug names, "boxed warning", "eGFR".
 3. Fuse the two ranked lists with reciprocal rank fusion (no score calibration needed).
 4. Keep one chunk per (drug, section). A drug often has 10+ near-identical labels from different
    manufacturers; without this the top-k is one passage repeated.
@@ -23,7 +23,8 @@ FOOTER = "This is a summary of FDA label text, not medical advice. Talk to a pha
 SYSTEM_PROMPT = """You answer questions about FDA drug labels.
 Rules:
 - Use ONLY the numbered sources below. If they do not contain the answer, say "The provided label sections do not answer this."
-- Cite every claim with the source number in square brackets, e.g. [2].
+- End every sentence with the number of the source it came from, in square brackets: "... fetal toxicity [1]."
+- The only valid citations are the source numbers shown below ([1], [2], ...). Never cite the label's own section numbers such as 7.3 or 8.1.
 - Never recommend a dose or a treatment for a specific person. Quote what the label says instead.
 - Be concise: 2-6 sentences."""
 
@@ -63,9 +64,18 @@ def _dense(conn, vector, n: int) -> list[Chunk]:
     return [Chunk(*r) for r in conn.execute(sql, {"vec": vector, "n": n}).fetchall()]
 
 
+# Lexical leg. plainto_tsquery ANDs every word, so one word the label never uses ("say", "cover")
+# would remove every match. Instead: match on ANY term, rank by how many distinct terms the chunk
+# contains, and only then by Postgres' density rank. Postgres FTS has no IDF, so without the
+# distinct-term count a long chunk repeating "warning" ten times beats the one that names the drug.
+_TERMS = "regexp_split_to_array(regexp_replace(plainto_tsquery('english', %(q)s)::text, '''', '', 'g'), ' & ')"
+_ANY_TERM = "replace(plainto_tsquery('english', %(q)s)::text, '&', '|')::tsquery"
+_MATCHED = f"(SELECT count(*) FROM unnest({_TERMS}) term WHERE c.tsv @@ term::tsquery)"
+
+
 def _lexical(conn, vector, question: str, n: int) -> list[Chunk]:
-    query = "websearch_to_tsquery('english', %(q)s)"
-    sql = _CANDIDATES.format(where=f"WHERE c.tsv @@ {query}", order=f"ts_rank_cd(c.tsv, {query}) DESC")
+    sql = _CANDIDATES.format(where=f"WHERE c.tsv @@ {_ANY_TERM}",
+                             order=f"{_MATCHED} DESC, ts_rank_cd(c.tsv, {_ANY_TERM}) DESC")
     return [Chunk(*r) for r in conn.execute(sql, {"vec": vector, "q": question, "n": n}).fetchall()]
 
 

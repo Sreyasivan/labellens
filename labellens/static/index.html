@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LabelLens</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1b1b; --muted:#666; --line:#ddd; --accent:#1f5fa8; --warn:#9a3b00; --ok:#1b6e3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#eee; --muted:#aaa; --line:#333; --accent:#7fb3ff; --warn:#ffb27a; --ok:#8fd9a8; } }
+  body { margin:0; padding:24px 16px; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.6rem; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 24px; }
+  section { border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:24px; }
+  h2 { font-size:1.1rem; margin:0 0 12px; }
+  form { display:flex; gap:8px; flex-wrap:wrap; }
+  input, select { flex:1 1 240px; padding:8px 10px; font:inherit; color:inherit; background:transparent; border:1px solid var(--line); border-radius:6px; }
+  button { padding:8px 16px; font:inherit; border:0; border-radius:6px; background:var(--accent); color:#fff; cursor:pointer; }
+  button[disabled] { opacity:.5; cursor:wait; }
+  .answer { white-space:pre-wrap; margin:16px 0 8px; }
+  .refused { color:var(--warn); }
+  details { border-top:1px solid var(--line); padding:8px 0; } summary { cursor:pointer; }
+  .meta { color:var(--muted); font-size:.9rem; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:640px) { .cols { grid-template-columns:1fr; } }
+  ul { padding-left:20px; } .bad { color:var(--warn); } .ok { color:var(--ok); }
+  .err { color:var(--warn); margin-top:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>LabelLens</h1>
+  <p class="sub">Cited answers and typed extraction over FDA drug labels. Summaries of label text, not medical advice. <a href="/docs">API docs</a></p>
+
+  <section>
+    <h2>Ask</h2>
+    <form id="ask-form">
+      <input id="q" placeholder="What is the boxed warning for sertraline?" required minlength="3">
+      <button>Ask</button>
+    </form>
+    <div id="ask-out"></div>
+  </section>
+
+  <section>
+    <h2>Extract</h2>
+    <form id="extract-form">
+      <input id="drug" placeholder="Generic name, e.g. metformin" required minlength="2">
+      <select id="section">
+        <option value="contraindications">contraindications</option>
+        <option value="drug_interactions">drug_interactions</option>
+        <option value="warnings_and_cautions">warnings_and_cautions</option>
+      </select>
+      <button>Extract</button>
+    </form>
+    <div id="extract-out"></div>
+  </section>
+</main>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function post(path, body, form, out) {
+  const btn = form.querySelector("button"); btn.disabled = true; out.innerHTML = '<p class="meta">Working…</p>';
+  try {
+    const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    return data;
+  } catch (e) { out.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+  finally { btn.disabled = false; }
+}
+
+document.getElementById("ask-form").onsubmit = async ev => {
+  ev.preventDefault();
+  const form = ev.target, out = document.getElementById("ask-out");
+  const d = await post("/ask", {question: document.getElementById("q").value}, form, out);
+  if (!d) return;
+  out.innerHTML = `<p class="answer ${d.refused ? "refused" : ""}">${esc(d.answer)}</p>` +
+    d.sources.map(s => `<details><summary>[${s.n}] ${esc(s.brand_name || s.generic_name)} (${esc(s.generic_name)}) · ${esc(s.section)} · distance ${s.distance}</summary><p>${esc(s.content)}</p></details>`).join("") +
+    (d.model ? `<p class="meta">${esc(d.model)} · ${d.latency_ms} ms</p>` : "");
+};
+
+document.getElementById("extract-form").onsubmit = async ev => {
+  ev.preventDefault();
+  const form = ev.target, out = document.getElementById("extract-out");
+  const d = await post("/extract", {generic_name: document.getElementById("drug").value, section: document.getElementById("section").value}, form, out);
+  if (!d) return;
+  const bad = new Set(d.ungrounded_items);
+  out.innerHTML = `<p class="meta">${esc(d.brand_name)} · ${esc(d.manufacturer)} · grounded ${d.grounded}/${d.items.length} · sentences covered ${d.covered}/${d.sentences} · ${esc(d.model)} · ${d.latency_ms} ms</p>
+    <div class="cols"><div><h3>Extracted</h3><ul>${d.items.map(i => `<li class="${bad.has(i) ? "bad" : "ok"}">${esc(i)}</li>`).join("")}</ul></div>
+    <div><h3>Section text</h3><p>${esc(d.section_text)}</p></div></div>`;
+};
+</script>
+</body>
+</html>

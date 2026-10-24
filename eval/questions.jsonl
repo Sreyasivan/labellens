@@ -6,3 +6,53 @@
 {"id": "q006", "question": "What is the boxed warning for sertraline?", "expected_generic_name": "sertraline", "expected_section": "boxed_warning", "must_mention": ["suicidal"]}
 {"id": "q007", "question": "Can levothyroxine be used for weight loss?", "expected_generic_name": "levothyroxine", "expected_section": "boxed_warning", "must_mention": ["obesity"]}
 {"id": "q008", "question": "What drugs interact with clopidogrel?", "expected_generic_name": "clopidogrel", "expected_section": "drug_interactions", "must_mention": ["omeprazole"]}
+{"id": "q009", "question": "What is the boxed warning for ibuprofen?", "expected_generic_name": "ibuprofen", "expected_section": "boxed_warning", "must_mention": ["cardiovascular"]}
+{"id": "q010", "question": "Which patients must not receive ibuprofen?", "expected_generic_name": "ibuprofen", "expected_section": "contraindications", "must_mention": ["aspirin"]}
+{"id": "q011", "question": "Why is methotrexate dangerous in pregnancy?", "expected_generic_name": "methotrexate", "expected_section": "boxed_warning", "must_mention": ["fetal"]}
+{"id": "q012", "question": "What is the recommended starting dose of metformin?", "expected_generic_name": "metformin", "expected_section": "dosage_and_administration", "must_mention": ["500 mg"]}
+{"id": "q013", "question": "What is the most common adverse reaction of amlodipine?", "expected_generic_name": "amlodipine", "expected_section": "adverse_reactions", "must_mention": ["edema"]}
+{"id": "q014", "question": "Can amlodipine be taken together with simvastatin?", "expected_generic_name": "amlodipine", "expected_section": "drug_interactions", "must_mention": ["simvastatin"]}
+{"id": "q015", "question": "Does fluoxetine have a boxed warning?", "expected_generic_name": "fluoxetine", "expected_section": "boxed_warning", "must_mention": ["suicidal"]}
+{"id": "q016", "question": "Can fluoxetine be combined with a monoamine oxidase inhibitor?", "expected_generic_name": "fluoxetine", "expected_section": "contraindications", "must_mention": ["maoi"]}
+{"id": "q017", "question": "What are the most common adverse reactions of gabapentin?", "expected_generic_name": "gabapentin", "expected_section": "adverse_reactions", "must_mention": ["dizziness"]}
+{"id": "q018", "question": "Does omeprazole interact with clopidogrel?", "expected_generic_name": "omeprazole", "expected_section": "drug_interactions", "must_mention": ["clopidogrel"]}
+{"id": "q019", "question": "When is prednisone contraindicated?", "expected_generic_name": "prednisone", "expected_section": "contraindications", "must_mention": ["fungal"]}
+{"id": "q020", "question": "What is the boxed warning for ciprofloxacin?", "expected_generic_name": "ciprofloxacin", "expected_section": "boxed_warning", "must_mention": ["tendon"]}
+{"id": "q021", "question": "Should ciprofloxacin be avoided in myasthenia gravis?", "expected_generic_name": "ciprofloxacin", "expected_section": "boxed_warning", "must_mention": ["myasthenia"]}
+{"id": "q022", "question": "What serious tendon problems are linked to levofloxacin?", "expected_generic_name": "levofloxacin", "expected_section": "boxed_warning", "must_mention": ["tendon"]}
+{"id": "q023", "question": "What does the boxed warning for lithium say?", "expected_generic_name": "lithium", "expected_section": "boxed_warning", "must_mention": ["toxicity"]}
+{"id": "q024", "question": "What liver risk is in the boxed warning for divalproex?", "expected_generic_name": "divalproex", "expected_section": "boxed_warning", "must_mention": ["hepatotoxicity"]}
+{"id": "q025", "question": "Which genetic test is recommended before starting carbamazepine in patients of Asian ancestry?", "expected_generic_name": "carbamazepine", "expected_section": "boxed_warning", "must_mention": ["hla-b"]}
+{"id": "q026", "question": "Does spironolactone cause gynecomastia?", "expected_generic_name": "spironolactone", "expected_section": "adverse_reactions", "must_mention": ["gynecomastia"]}
+{"id": "q027", "question": "When must spironolactone not be used?", "expected_generic_name": "spironolactone", "expected_section": "contraindications", "must_mention": ["hyperkalemia"]}
+{"id": "q028", "question": "What are the contraindications of hydrochlorothiazide?", "expected_generic_name": "hydrochlorothiazide", "expected_section": "contraindications", "must_mention": ["anuria"]}
+{"id": "q029", "question": "What are the most common adverse reactions of lisinopril?", "expected_generic_name": "lisinopril", "expected_section": "adverse_reactions", "must_mention": ["cough"]}
+{"id": "q030", "question": "Why does losartan have a boxed warning?", "expected_generic_name": "losartan", "expected_section": "boxed_warning", "must_mention": ["fetal"]}
+{"id": "q031", "question": "What does the boxed warning for tramadol cover?", "expected_generic_name": "tramadol", "expected_section": "boxed_warning", "must_mention": ["addiction"]}
+{"id": "q032", "question": "Can tramadol be given to children under 12 years of age?", "expected_generic_name": "tramadol", "expected_section": "contraindications", "must_mention": ["12"]}
+{"id": "q033", "question": "What are the most common adverse reactions of azithromycin?", "expected_generic_name": "azithromycin", "expected_section": "adverse_reactions", "must_mention": ["diarrhea"]}
+{"id": "q034", "question": "Do antacids affect the absorption of doxycycline?", "expected_generic_name": "doxycycline", "expected_section": "drug_interactions", "must_mention": ["antacid"]}
+{"id": "q035", "question": "Is warfarin contraindicated in pregnancy?", "expected_generic_name": "warfarin", "expected_section": "contraindications", "must_mention": ["pregnan"]}
+{"id": "q036", "question": "What is the most common adverse reaction of allopurinol?", "expected_generic_name": "allopurinol", "expected_section": "adverse_reactions", "must_mention": ["rash"]}
+{"id": "q037", "question": "What is the boxed warning for fentanyl?", "expected_generic_name": "fentanyl", "expected_section": "boxed_warning", "must_mention": ["respiratory"]}
+{"id": "q038", "question": "Does montelukast have a boxed warning?", "expected_generic_name": "montelukast", "expected_section": "boxed_warning", "must_mention": ["neuropsychiatric"]}
+{"id": "q039", "question": "What is the antidote for acetaminophen overdose?", "expected_generic_name": "acetaminophen", "expected_section": "overdosage", "must_mention": ["acetylcysteine"]}
+{"id": "q040", "question": "How is an oxycodone overdose treated?", "expected_generic_name": "oxycodone", "expected_section": "overdosage", "must_mention": ["naloxone"]}
+{"id": "q041", "question": "Can sildenafil be taken with nitrates?", "expected_generic_name": "sildenafil", "expected_section": "contraindications", "must_mention": ["nitrate"]}
+{"id": "q042", "question": "Should levothyroxine be taken with or without food?", "expected_generic_name": "levothyroxine", "expected_section": "dosage_and_administration", "must_mention": ["empty stomach"]}
+{"id": "q043", "question": "Should metformin be stopped for imaging with iodinated contrast?", "expected_generic_name": "metformin", "expected_section": ["contraindications", "warnings_and_cautions"], "must_mention": ["contrast"]}
+{"id": "q044", "question": "Is sertraline contraindicated with pimozide?", "expected_generic_name": "sertraline", "expected_section": "contraindications", "must_mention": ["pimozide"]}
+{"id": "q045", "question": "Why must isotretinoin never be used in pregnancy?", "expected_generic_name": "isotretinoin", "expected_section": "boxed_warning", "must_mention": ["pregnan"]}
+{"id": "q046", "question": "What blood monitoring does clozapine require?", "expected_generic_name": "clozapine", "expected_section": "boxed_warning", "must_mention": ["neutro"]}
+{"id": "q047", "question": "Does ondansetron prolong the QT interval?", "expected_generic_name": "ondansetron", "expected_section": "warnings_and_cautions", "must_mention": ["qt"]}
+{"id": "q048", "question": "What happens if apixaban is stopped early?", "expected_generic_name": "apixaban", "expected_section": "boxed_warning", "must_mention": ["thrombotic"]}
+{"id": "q049", "question": "What happens if rosuvastatin is taken with cyclosporine?", "expected_generic_name": "rosuvastatin", "expected_section": "drug_interactions", "must_mention": ["cyclosporine"]}
+{"id": "q050", "question": "What does the pantoprazole label say about use in pregnancy?", "expected_generic_name": "pantoprazole", "expected_section": "use_in_specific_populations", "must_mention": ["pregnan"]}
+{"id": "x001", "question": "What is the capital of France?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x002", "question": "Write a Python function that reverses a string.", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x003", "question": "Who won the 2022 FIFA World Cup?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x004", "question": "How do I fix a flat tyre on a bicycle?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x005", "question": "What is the boiling point of ethanol?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x006", "question": "Summarise the plot of Hamlet.", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x007", "question": "What is today's interest rate on a 30-year mortgage?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x008", "question": "How many calories are in a banana?", "expected_generic_name": null, "expected_section": null, "must_mention": []}

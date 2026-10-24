@@ -5,6 +5,7 @@ Usage: python -m labellens.ingest --limit 2000
 """
 import argparse
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -25,7 +26,11 @@ def fetch_page(search: str, skip: int, cache_name: str) -> list[dict]:
     params = {"search": search, "limit": PAGE_SIZE, "skip": skip}
     if config.OPENFDA_API_KEY:
         params["api_key"] = config.OPENFDA_API_KEY
-    r = httpx.get(config.OPENFDA_URL, params=params, timeout=60)
+    for attempt in range(3):
+        r = httpx.get(config.OPENFDA_URL, params=params, timeout=60)
+        if r.status_code != 429:  # rate limited (40 requests/min without an API key): wait and retry
+            break
+        time.sleep(20 * (attempt + 1))
     if r.status_code == 404:  # openFDA returns 404 for "no results"
         return []
     r.raise_for_status()
@@ -124,16 +129,17 @@ def upsert_label(conn, label: dict) -> int:
 def eval_generics(path: Path = config.ROOT / "eval" / "questions.jsonl") -> list[str]:
     if not path.exists():
         return []
-    names = {json.loads(line)["expected_generic_name"] for line in path.read_text().splitlines() if line.strip()}
-    return sorted(names)
+    names = {json.loads(line).get("expected_generic_name") for line in path.read_text().splitlines() if line.strip()}
+    return sorted(n for n in names if n)  # None marks an out-of-scope question
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=2000)
+    parser.add_argument("--only-eval", action="store_true", help="index only the drugs the eval asks about (used in CI)")
     args = parser.parse_args()
 
-    labels = fetch_labels(args.limit)
+    labels = [] if args.only_eval else fetch_labels(args.limit)
     seen = {l["set_id"] for l in labels}
     for name in eval_generics():  # make sure every drug the eval asks about is indexed
         for label in fetch_by_generic(name):

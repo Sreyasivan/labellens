@@ -20,6 +20,11 @@ def test_parse_accepts_bare_list():
     assert extract._parse('["x"]').items == ["x"]
 
 
+def test_parse_flattens_object_items():
+    out = extract._parse('{"items": [{"drug": "Probenecid", "effect": "increases amoxicillin levels"}, "Warfarin"]}')
+    assert out.items == ["Probenecid: increases amoxicillin levels", "Warfarin"]
+
+
 def test_sentences_split_on_periods():
     assert len(sentences(SECTION)) == 3
 
@@ -45,3 +50,15 @@ def test_coverage_uses_all_items_together():
     section = "Contraindicated in pregnancy, severe hepatic impairment, and hypersensitivity to estradiol."
     items = ["pregnancy", "severe hepatic impairment", "hypersensitivity to estradiol"]
     assert score(items, section)["covered"] == 1
+
+
+def test_every_section_rule_builds_a_prompt():
+    for section, rule in extract.ITEM_RULES.items():
+        prompt = extract.SYSTEM_PROMPT.format(rule=rule)
+        assert rule in prompt and '{"items"' in prompt
+
+
+def test_unknown_section_is_rejected():
+    import pytest
+    with pytest.raises(ValueError):
+        extract.extract_items("packaging", "text")

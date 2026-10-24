@@ -59,3 +59,13 @@ def test_dedupe_keeps_first_per_drug_and_section():
 
 def test_in_scope_uses_closest_chunk_not_first():
     assert rag.in_scope([chunk(0.9), chunk(0.2)], max_distance=0.55)
+
+
+def test_eval_hit_accepts_a_list_of_sections():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "eval"))
+    from run_eval import is_hit
+    q = {"expected_generic_name": "metformin", "expected_section": ["contraindications", "warnings_and_cautions"]}
+    assert is_hit(q, [rag.Chunk(1, "s", "B", "METFORMIN HCL", "warnings_and_cautions", "x", 0.2)])
+    assert not is_hit(q, [rag.Chunk(1, "s", "B", "METFORMIN HCL", "adverse_reactions", "x", 0.2)])
