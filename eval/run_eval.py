@@ -17,12 +17,14 @@ from labellens import config, rag  # noqa: E402
 QUESTIONS = Path(__file__).parent / "questions.jsonl"
 RESULTS = Path(__file__).parent / "results" / "retrieval.json"
 
-# name -> (mode, dedupe)
+# name -> (mode, dedupe, named drug first)
 CONFIGS = {
-    "vector, naive top-k": ("vector", False),
-    "vector + (drug, section) dedupe": ("vector", True),
-    "hybrid (vector + FTS) + dedupe": ("hybrid", True),
+    "vector, naive top-k": ("vector", False, False),
+    "vector + (drug, section) dedupe": ("vector", True, False),
+    "hybrid (vector + FTS) + dedupe": ("hybrid", True, False),
+    "hybrid + dedupe + named drug first": ("hybrid", True, True),
 }
+BEST = "hybrid + dedupe + named drug first"
 
 
 def load_questions() -> list[dict]:
@@ -47,14 +49,14 @@ def is_hit(q: dict, chunks: list[rag.Chunk]) -> bool:
     )
 
 
-def run_config(questions: list[dict], mode: str, dedupe: bool) -> dict:
+def run_config(questions: list[dict], mode: str, dedupe: bool, drug_first: bool) -> dict:
     per_question, by_section = [], defaultdict(lambda: [0, 0])
     for q in questions:
-        chunks = rag.retrieve(q["question"], k=config.TOP_K, mode=mode, dedupe_results=dedupe)
+        chunks = rag.retrieve(q["question"], k=config.TOP_K, mode=mode, dedupe_results=dedupe, drug_first=drug_first)
         if q.get("expected_generic_name"):
             hit, section = is_hit(q, chunks), "/".join(sorted(wanted_sections(q) or ["any"]))
-        else:  # out-of-scope question: a hit means we would refuse
-            hit, section = not rag.in_scope(chunks), "out_of_scope"
+        else:  # out-of-scope question: a hit means we would refuse (the named-drug check applies in that config only)
+            hit, section = not rag.in_scope(chunks, q["question"], require_drug=drug_first), "out_of_scope"
         by_section[section][0] += int(hit)
         by_section[section][1] += 1
         per_question.append({"id": q["id"], "hit": hit, "top": [(c.generic_name, c.section, round(c.distance, 3)) for c in chunks[:3]]})
@@ -74,8 +76,8 @@ def main() -> None:
     for name, r in results.items():
         print(f"{name:36} {r['hits']}/{r['n']} = {r['hits'] / r['n']:.0%}")
 
-    best = results["hybrid (vector + FTS) + dedupe"]
-    print("\nby section (hybrid):")
+    best = results[BEST]
+    print(f"\nby section ({BEST}):")
     for section, (h, n) in sorted(best["by_section"].items()):
         print(f"  {section:28} {h}/{n}")
     for r in best["questions"]:
@@ -87,7 +89,7 @@ def main() -> None:
 
     recall = best["hits"] / best["n"]
     if args.min_recall is not None and recall < args.min_recall:
-        print(f"\nFAIL: hybrid recall {recall:.0%} is below the gate of {args.min_recall:.0%}")
+        print(f"\nFAIL: recall {recall:.0%} ({BEST}) is below the gate of {args.min_recall:.0%}")
         sys.exit(1)
 
 

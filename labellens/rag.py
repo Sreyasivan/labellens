@@ -5,14 +5,18 @@ Retrieval, in order:
 2. Lexical (hybrid mode): Postgres full-text search on the same chunks, any-term match ranked by
    how many terms hit. Catches exact terms that embeddings blur: drug names, "boxed warning", "eGFR".
 3. Fuse the two ranked lists with reciprocal rank fusion (no score calibration needed).
-4. Keep one chunk per (drug, section). A drug often has 10+ near-identical labels from different
+4. If the question names a drug in the index, that drug's chunks come first.
+5. Keep one chunk per (drug, section). A drug often has 10+ near-identical labels from different
    manufacturers; without this the top-k is one passage repeated.
 
 Guardrails, in order:
-1. If nothing in the index is close to the question, refuse. The LLM is never called.
+1. Scope, before any model call: the closest chunk must be within a distance threshold AND the
+   question must name a drug that is in the index. The threshold alone let through general medical
+   questions ("what are the symptoms of type 2 diabetes") that happen to sit close to label text.
 2. The model may only use the retrieved chunks and must cite them as [1], [2], ...
 3. Every answer carries a fixed "not medical advice" footer.
 """
+import re
 from dataclasses import dataclass, field
 
 from labellens import config, embed, llm
@@ -90,6 +94,40 @@ def rrf(*ranked: list[Chunk], k: int = 60) -> list[Chunk]:
     return [by_id[i] for i in sorted(scores, key=scores.__getitem__, reverse=True)]
 
 
+# Words in label names that are not the drug: salts, forms, routes. "WARFARIN SODIUM" names warfarin,
+# and a question about "sodium levels" must not count as naming it.
+_NOT_A_DRUG = {
+    "sodium", "potassium", "calcium", "magnesium", "hydrochloride", "hcl", "sulfate", "sulphate", "acetate",
+    "citrate", "tartrate", "succinate", "maleate", "mesylate", "fumarate", "phosphate", "besylate", "bromide",
+    "chloride", "nitrate", "injection", "tablets", "tablet", "capsules", "capsule", "oral", "solution",
+    "suspension", "extended", "release", "delayed", "film", "coated", "topical", "cream", "ointment",
+    "ophthalmic", "nasal", "spray", "patch", "transdermal", "with", "and", "plus", "anhydrous", "monohydrate",
+    "dihydrate", "hydrate", "kit", "pediatric", "adult", "powder", "concentrate", "human", "recombinant",
+}
+
+
+def drug_words(chunk: Chunk) -> set[str]:
+    words = set()
+    for name in (chunk.generic_name, chunk.brand_name):
+        for w in re.findall(r"[a-z]+", (name or "").lower()):
+            if len(w) >= 4 and w not in _NOT_A_DRUG:
+                words.add(w)
+    return words
+
+
+def names_drug(question: str, chunk: Chunk) -> bool:
+    """Does the question mention this chunk's drug (generic or brand name)?"""
+    q = question.lower()
+    return any(w in q for w in drug_words(chunk))
+
+
+def named_first(question: str, chunks: list[Chunk]) -> list[Chunk]:
+    """Stable: chunks of a drug the question names come before everything else. Generic passages
+    ("the following adverse reactions are discussed elsewhere...") sit close to every question in
+    embedding space; this is what stops them crowding out the drug the user actually asked about."""
+    return sorted(chunks, key=lambda c: not names_drug(question, c))
+
+
 def dedupe(chunks: list[Chunk]) -> list[Chunk]:
     """One chunk per (drug, section), keeping the first (best ranked)."""
     seen, out = set(), []
@@ -101,20 +139,37 @@ def dedupe(chunks: list[Chunk]) -> list[Chunk]:
     return out
 
 
-def retrieve(question: str, k: int = config.TOP_K, mode: str = config.RETRIEVAL, dedupe_results: bool = True) -> list[Chunk]:
+def retrieve(question: str, k: int = config.TOP_K, mode: str = config.RETRIEVAL,
+             dedupe_results: bool = True, drug_first: bool = True) -> list[Chunk]:
     vector = embed.embed_query(question)
     pool = k * config.CANDIDATE_POOL
+    # Each leg fetches more rows than the pool and is deduped to one chunk per (drug, section) before
+    # fusion. Otherwise a drug with 18 manufacturers' labels fills a leg's pool with one section
+    # repeated and its other sections never reach the fusion step.
+    fetch = pool * config.LEG_OVERSAMPLE if dedupe_results else pool
     with connect() as conn:
-        ranked = _dense(conn, vector, pool)
+        legs = [_dense(conn, vector, fetch)]
         if mode == "hybrid":
-            ranked = rrf(ranked, _lexical(conn, vector, question, pool))
+            legs.append(_lexical(conn, vector, question, fetch))
+    if dedupe_results:
+        legs = [dedupe(leg)[:pool] for leg in legs]
+    ranked = rrf(*legs) if len(legs) > 1 else legs[0]
+    if drug_first:
+        ranked = named_first(question, ranked)
     if dedupe_results:
         ranked = dedupe(ranked)
     return ranked[:k]
 
 
-def in_scope(chunks: list[Chunk], max_distance: float = config.MAX_DISTANCE) -> bool:
-    return bool(chunks) and min(c.distance for c in chunks) <= max_distance
+def in_scope(chunks: list[Chunk], question: str = "", max_distance: float = config.MAX_DISTANCE,
+             require_drug: bool = True) -> bool:
+    """Two signals, both required: something in the index is close, and the question names a drug
+    that was retrieved. An empty question skips the second check (unit tests, programmatic use)."""
+    if not chunks or min(c.distance for c in chunks) > max_distance:
+        return False
+    if require_drug and question:
+        return any(names_drug(question, c) for c in chunks)
+    return True
 
 
 def build_prompt(question: str, chunks: list[Chunk]) -> str:
@@ -127,10 +182,11 @@ def build_prompt(question: str, chunks: list[Chunk]) -> str:
 
 def answer(question: str) -> Answer:
     chunks = retrieve(question)
-    if not in_scope(chunks):
+    if not in_scope(chunks, question):
         return Answer(
             question=question,
-            text="I can only answer questions about the FDA drug labels in this index, and nothing in it matches that question.",
+            text="I can only answer questions about a specific drug whose FDA label is in this index. "
+                 "Name the drug (generic or brand) and ask about its label.",
             refused=True,
         )
     completion = llm.chat(SYSTEM_PROMPT, build_prompt(question, chunks))

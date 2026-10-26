@@ -28,7 +28,7 @@ def test_refusal_does_not_call_the_llm(monkeypatch):
 def test_answer_has_citations_and_footer(monkeypatch):
     monkeypatch.setattr(rag, "retrieve", lambda q, k=5: [chunk(0.2)])
     monkeypatch.setattr(rag.llm, "chat", lambda *a, **k: Completion("Do not use with X [1].", 10, 5, 1, "test"))
-    result = rag.answer("What are the contraindications?")
+    result = rag.answer("What are the contraindications of Brand?")
     assert not result.refused
     assert len(result.citations) == 1
     assert "[1]" in result.text
@@ -59,6 +59,34 @@ def test_dedupe_keeps_first_per_drug_and_section():
 
 def test_in_scope_uses_closest_chunk_not_first():
     assert rag.in_scope([chunk(0.9), chunk(0.2)], max_distance=0.55)
+
+
+def warfarin(distance: float = 0.2) -> rag.Chunk:
+    return rag.Chunk(2, "set", "Coumadin", "WARFARIN SODIUM", "boxed_warning", "WARNING: BLEEDING RISK", distance)
+
+
+def test_names_drug_matches_generic_or_brand_but_not_the_salt():
+    assert rag.names_drug("Does warfarin have a boxed warning?", warfarin())
+    assert rag.names_drug("What is the boxed warning for Coumadin?", warfarin())
+    assert not rag.names_drug("What is a normal sodium level?", warfarin())
+
+
+def test_close_chunk_is_still_out_of_scope_when_no_drug_is_named():
+    assert not rag.in_scope([warfarin(0.2)], "What are the symptoms of type 2 diabetes?")
+    assert rag.in_scope([warfarin(0.2)], "Is warfarin safe in pregnancy?")
+
+
+def test_named_drug_comes_first_and_order_is_otherwise_kept():
+    hub = chunk(0.1, "adverse_reactions")
+    w1, w2 = warfarin(0.3), warfarin(0.4)
+    w2.section = "contraindications"
+    assert rag.named_first("boxed warning for warfarin?", [hub, w1, w2]) == [w1, w2, hub]
+
+
+def test_refusal_when_question_names_no_indexed_drug(monkeypatch):
+    monkeypatch.setattr(rag, "retrieve", lambda q, k=5: [warfarin(0.2)])
+    monkeypatch.setattr(rag.llm, "chat", lambda *a, **k: (_ for _ in ()).throw(AssertionError("LLM called")))
+    assert rag.answer("How is blood pressure measured at home?").refused
 
 
 def test_eval_hit_accepts_a_list_of_sections():

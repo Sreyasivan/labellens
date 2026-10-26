@@ -56,3 +56,45 @@
 {"id": "x006", "question": "Summarise the plot of Hamlet.", "expected_generic_name": null, "expected_section": null, "must_mention": []}
 {"id": "x007", "question": "What is today's interest rate on a 30-year mortgage?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
 {"id": "x008", "question": "How many calories are in a banana?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "q051", "question": "What is the boxed warning for methylphenidate?", "expected_generic_name": "methylphenidate", "expected_section": "boxed_warning", "must_mention": ["abuse"]}
+{"id": "q052", "question": "Does amiodarone's boxed warning mention lung toxicity?", "expected_generic_name": "amiodarone", "expected_section": "boxed_warning", "must_mention": ["pulmonary"]}
+{"id": "q053", "question": "What are the contraindications of amiodarone?", "expected_generic_name": "amiodarone", "expected_section": "contraindications", "must_mention": ["sinus"]}
+{"id": "q054", "question": "What does the boxed warning for estradiol say about endometrial cancer?", "expected_generic_name": "estradiol", "expected_section": "boxed_warning", "must_mention": ["endometrial"]}
+{"id": "q055", "question": "Can estradiol be used in a patient with a history of breast cancer?", "expected_generic_name": "estradiol", "expected_section": "contraindications", "must_mention": ["breast"]}
+{"id": "q056", "question": "What is the boxed warning for bupropion?", "expected_generic_name": "bupropion", "expected_section": "boxed_warning", "must_mention": ["suicidal"]}
+{"id": "q057", "question": "When is bupropion contraindicated?", "expected_generic_name": "bupropion", "expected_section": "contraindications", "must_mention": ["seizure"]}
+{"id": "q058", "question": "What are the most common adverse reactions of duloxetine?", "expected_generic_name": "duloxetine", "expected_section": "adverse_reactions", "must_mention": ["nausea"]}
+{"id": "q059", "question": "Does venlafaxine have a boxed warning?", "expected_generic_name": "venlafaxine", "expected_section": "boxed_warning", "must_mention": ["suicidal"]}
+{"id": "q060", "question": "What is the boxed warning for quetiapine?", "expected_generic_name": "quetiapine", "expected_section": "boxed_warning", "must_mention": ["dementia"]}
+{"id": "q061", "question": "What does the olanzapine label say about elderly patients with dementia-related psychosis?", "expected_generic_name": "olanzapine", "expected_section": "boxed_warning", "must_mention": ["dementia"]}
+{"id": "q062", "question": "What is the boxed warning for aripiprazole?", "expected_generic_name": "aripiprazole", "expected_section": "boxed_warning", "must_mention": ["dementia"]}
+{"id": "q063", "question": "What is the boxed warning for celecoxib?", "expected_generic_name": "celecoxib", "expected_section": "boxed_warning", "must_mention": ["cardiovascular"]}
+{"id": "q064", "question": "What does the naproxen boxed warning say about gastrointestinal risk?", "expected_generic_name": "naproxen", "expected_section": "boxed_warning", "must_mention": ["bleeding"]}
+{"id": "q065", "question": "What is the boxed warning for morphine?", "expected_generic_name": "morphine", "expected_section": "boxed_warning", "must_mention": ["respiratory"]}
+{"id": "q066", "question": "How is a morphine overdose treated?", "expected_generic_name": "morphine", "expected_section": "overdosage", "must_mention": ["naloxone"]}
+{"id": "q067", "question": "What is the boxed warning for hydrocodone?", "expected_generic_name": "hydrocodone", "expected_section": "boxed_warning", "must_mention": ["addiction"]}
+{"id": "q068", "question": "Can furosemide be given to a patient with anuria?", "expected_generic_name": "furosemide", "expected_section": "contraindications", "must_mention": ["anuria"]}
+{"id": "q069", "question": "What is the boxed warning for furosemide?", "expected_generic_name": "furosemide", "expected_section": "boxed_warning", "must_mention": ["electrolyte"]}
+{"id": "q070", "question": "What are the contraindications of digoxin?", "expected_generic_name": "digoxin", "expected_section": "contraindications", "must_mention": ["fibrillation"]}
+{"id": "q071", "question": "What is the boxed warning for enoxaparin?", "expected_generic_name": "enoxaparin", "expected_section": "boxed_warning", "must_mention": ["epidural"]}
+{"id": "q072", "question": "What is the boxed warning for rivaroxaban?", "expected_generic_name": "rivaroxaban", "expected_section": "boxed_warning", "must_mention": ["spinal"]}
+{"id": "q073", "question": "What are the contraindications of dabigatran?", "expected_generic_name": "dabigatran", "expected_section": "contraindications", "must_mention": ["bleeding"]}
+{"id": "q074", "question": "Can allopurinol be combined with azathioprine?", "expected_generic_name": "allopurinol", "expected_section": "drug_interactions", "must_mention": ["azathioprine"]}
+{"id": "q075", "question": "Does fluconazole interact with warfarin?", "expected_generic_name": "fluconazole", "expected_section": "drug_interactions", "must_mention": ["warfarin"]}
+{"id": "q076", "question": "What is the boxed warning for metronidazole?", "expected_generic_name": "metronidazole", "expected_section": "boxed_warning", "must_mention": ["carcinogenic"]}
+{"id": "q077", "question": "Can metronidazole be taken with alcohol?", "expected_generic_name": "metronidazole", "expected_section": ["contraindications", "drug_interactions", "warnings_and_cautions"], "must_mention": ["alcohol"]}
+{"id": "q078", "question": "What is the most common adverse reaction of nitrofurantoin?", "expected_generic_name": "nitrofurantoin", "expected_section": "adverse_reactions", "must_mention": ["nausea"]}
+{"id": "q079", "question": "What does the apixaban label say about use in pregnancy?", "expected_generic_name": "apixaban", "expected_section": "use_in_specific_populations", "must_mention": ["pregnan"]}
+{"id": "q080", "question": "What is the recommended starting dose of sertraline for major depressive disorder?", "expected_generic_name": "sertraline", "expected_section": "dosage_and_administration", "must_mention": ["50 mg"]}
+{"id": "q081", "question": "What is the boxed warning for ketoconazole tablets?", "expected_generic_name": "ketoconazole", "expected_section": "boxed_warning", "must_mention": ["hepatotoxicity"]}
+{"id": "q082", "question": "What are the contraindications of simvastatin?", "expected_generic_name": "simvastatin", "expected_section": "contraindications", "must_mention": ["itraconazole"]}
+{"id": "q083", "question": "Does simvastatin interact with amiodarone?", "expected_generic_name": "simvastatin", "expected_section": "drug_interactions", "must_mention": ["amiodarone"]}
+{"id": "q084", "question": "What are the most common adverse reactions of tamsulosin?", "expected_generic_name": "tamsulosin", "expected_section": "adverse_reactions", "must_mention": ["dizziness"]}
+{"id": "x009", "question": "What is the normal range for serum creatinine in adults?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x010", "question": "How does the liver metabolise alcohol?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x011", "question": "What is the mechanism of action of beta blockers?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x012", "question": "What are the symptoms of type 2 diabetes?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x013", "question": "How many milligrams of caffeine are in a cup of coffee?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x014", "question": "What is the difference between a virus and a bacterium?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x015", "question": "Which vaccines are recommended before travelling to India?", "expected_generic_name": null, "expected_section": null, "must_mention": []}
+{"id": "x016", "question": "How is blood pressure measured correctly at home?", "expected_generic_name": null, "expected_section": null, "must_mention": []}

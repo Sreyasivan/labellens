@@ -58,6 +58,7 @@ def main() -> None:
         r = check(q, a)
         r["answer"] = a.text
         r["sources"] = [(c.generic_name, c.section) for c in a.citations]
+        r["source_text"] = [c.content for c in a.citations]  # kept for the faithfulness judge
         rows.append(r)
         if a.completion:
             latencies.append(a.completion.latency_ms)

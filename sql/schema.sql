@@ -27,8 +27,10 @@ CREATE INDEX IF NOT EXISTS chunks_set_id_idx ON chunks (set_id);
 
 -- Full-text index for hybrid retrieval. Dense vectors miss exact terms ("boxed warning", a drug
 -- name); Postgres FTS catches them, so no separate BM25 library is needed.
--- The full-text column carries the section name too, so "boxed warning" matches boxed_warning chunks
--- whose text never says those words (they start with "WARNING: ...").
+-- The full-text column carries the drug's names and the section name as well as the text, so
+-- "boxed warning for rivaroxaban" matches a boxed-warning chunk that only ever says "XARELTO", and
+-- "boxed warning" matches chunks that start with "WARNING: ..." without the word "boxed".
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS names TEXT NOT NULL DEFAULT '';  -- generic + brand, copied at ingest
 ALTER TABLE chunks ADD COLUMN IF NOT EXISTS tsv tsvector
-    GENERATED ALWAYS AS (to_tsvector('english', replace(section, '_', ' ') || '. ' || content)) STORED;
+    GENERATED ALWAYS AS (to_tsvector('english', names || '. ' || replace(section, '_', ' ') || '. ' || content)) STORED;
 CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING gin (tsv);

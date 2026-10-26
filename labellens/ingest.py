@@ -123,11 +123,12 @@ def upsert_label(conn, label: dict) -> int:
     if not chunks:
         return 0
     vectors = embed.embed_passages([c[2] for c in chunks])
+    names = " ".join(n for n in (_first(label, "generic_name"), _first(label, "brand_name")) if n)
     conn.execute("DELETE FROM chunks WHERE set_id = %s", (set_id,))
     with conn.cursor() as cur:
         cur.executemany(
-            "INSERT INTO chunks (set_id, section, position, content, embedding) VALUES (%s, %s, %s, %s, %s)",
-            [(set_id, s, p, c, v) for (s, p, c), v in zip(chunks, vectors)],
+            "INSERT INTO chunks (set_id, section, position, content, names, embedding) VALUES (%s, %s, %s, %s, %s, %s)",
+            [(set_id, s, p, c, names, v) for (s, p, c), v in zip(chunks, vectors)],
         )
     return len(chunks)
 

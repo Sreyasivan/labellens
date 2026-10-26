@@ -27,6 +27,9 @@ eval-answer:      ## end-to-end answer eval: citations, required terms, refusals
 test:
 	uv run pytest -q
 
+eval-faith:       ## judged faithfulness of cited sentences (uses eval/results/answers.json), plus judge validation
+	uv run python eval/run_faithfulness.py
+
 eval-extract:     ## extraction eval on N real labels: make eval-extract N=15 SECTION=contraindications
 	uv run python eval/run_extract_eval.py --n $(or $(N),15) --section $(or $(SECTION),contraindications)
 

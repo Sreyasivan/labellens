@@ -44,7 +44,25 @@ answer itself:
 
 "Answered correctly" means all checks passed. Latency p50/p95 and mean token counts are reported so a
 model or retrieval change shows its cost. What this cannot measure: whether the sentence around a
-required term is faithful to the source. That needs a judged metric (see the roadmap).
+required term is faithful to the source. That is the next eval.
+
+## Faithfulness: `make eval-faith`
+
+Reads the answers the previous eval wrote (nothing is regenerated), splits each one into sentences,
+and for every sentence that carries a `[n]` citation asks a judge model whether the cited source
+supports it. The judge must first quote the supporting span; a verdict whose quote is not in the
+source is discarded as unsupported, because a judge that cannot point at the text is guessing.
+
+| number | meaning |
+|---|---|
+| supported / judged | cited sentences the judge finds supported by their source |
+| uncited | sentences with no citation at all; not judged, reported as a failure of the citing rule |
+| judge vs hand labels | agreement with `judge_labels.jsonl`, printed before any other number |
+
+`judge_labels.jsonl` holds hand-labelled (sentence, cited sources, supported) rows with a note on each
+negative. The judge's agreement with them is the ceiling on how much its faithfulness number means;
+a judge below roughly 80% agreement should be fixed or replaced before its number is quoted. Labels
+carry their source text, so they survive a re-run that changes the answers.
 
 ## Extraction: `make eval-extract SECTION=...`
 

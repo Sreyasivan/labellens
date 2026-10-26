@@ -48,5 +48,7 @@ TOP_K = 5
 
 # "hybrid" fuses dense + full-text search; "vector" is dense only (kept for the eval comparison).
 RETRIEVAL = os.getenv("RETRIEVAL", "hybrid")
-# Each retriever returns TOP_K * CANDIDATE_POOL candidates before fusion and (drug, section) dedupe.
+# Each retriever contributes TOP_K * CANDIDATE_POOL distinct (drug, section) candidates to the fusion
+# step, fetched from LEG_OVERSAMPLE times as many raw rows so duplicate labels cannot crowd a leg out.
 CANDIDATE_POOL = 10
+LEG_OVERSAMPLE = 6

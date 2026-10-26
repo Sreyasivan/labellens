@@ -37,8 +37,8 @@ LabelLens is a small, measurable system built for those rules.
 
 **Cited question answering.** Retrieval over 2,000 prescription labels from openFDA, chunked by label
 section, with hybrid dense + full-text search. The model is only shown the retrieved sections and must
-cite them by number. If nothing in the index is close to the question, it refuses *before* the model
-is called.
+cite them by number. If the question does not name a drug in the index, or nothing in the index is
+close to it, it refuses *before* the model is called.
 
 ```
 $ make ask Q="What are the contraindications of metformin?"
@@ -81,46 +81,77 @@ checked against the label text before any of it runs. The numbers below come fro
 ## Results
 
 Index: 2,000 prescription labels, 56,686 section chunks. Model: `llama3.2` (3B) via Ollama on a laptop
-CPU. Question set: 58 questions in `eval/questions.jsonl`, 50 in scope across 9 label sections and 8
-off-topic, every in-scope one verified against the label text by `make check-questions`.
+CPU. Question set: 100 questions in `eval/questions.jsonl`, 84 in scope across 9 label sections and
+16 off-topic (8 general, 8 that use clinical vocabulary), every in-scope one verified against the label
+text by `make check-questions`.
 
 **Retrieval** (recall@5; an off-topic question counts as a hit only when it would be refused):
 
 | retrieval configuration | recall@5 |
 |---|---|
-| dense vectors, naive top-k | 49/58 = 84% |
-| dense vectors + one chunk per (drug, section) | 54/58 = 93% |
-| **hybrid dense + full-text, fused with RRF, + dedupe** | **57/58 = 98%** |
+| dense vectors, naive top-k | 70/100 |
+| dense vectors + one chunk per (drug, section) | 81/100 |
+| hybrid dense + full-text, fused with RRF, + dedupe | 82/100 |
+| **hybrid + dedupe + the named drug's chunks first** | **97/100** |
 
-Per section with the hybrid configuration: boxed warning 20/20, contraindications 11/12, adverse
-reactions 7/7, drug interactions 5/5, dosage 2/2, overdosage 2/2, specific populations 1/1, warnings
-1/1, off-topic refused 8/8. The one miss is spironolactone's contraindications, outranked by its own
-interactions section and a combination product.
+Per section with the final configuration: boxed warning 35/37, contraindications 17/18, adverse
+reactions 10/10, drug interactions 8/8, dosage 3/3, overdosage 3/3, specific populations 2/2, warnings
+1/1, off-topic refused 16/16. All three misses are "right drug, wrong section": the question names the
+drug, its chunks are retrieved, but another of its sections outranks the one that holds the answer.
 
-Each step fixed a failure the eval exposed. Naive top-k returned the same passage from five
-manufacturers' copies of one label. Dense vectors ranked the sertraline *boxed warning* 24th because
-embeddings blur exact terms. Postgres' default full-text query ANDs every word, so "What does the boxed
-warning for lithium say?" matched nothing; ranking by the number of distinct matching terms fixed it.
-And the first scope threshold let 7 of 8 off-topic questions through; measuring the distance gap set it.
+Each step fixed a failure the eval exposed, and the larger set exposed new ones:
 
-**Answers** (the full ask path on the same 58 questions):
+- Naive top-k returned the same passage from five manufacturers' copies of one label.
+- Dense vectors ranked the sertraline *boxed warning* 24th because embeddings blur exact terms.
+- Postgres' default full-text query ANDs every word, so "What does the boxed warning for lithium say?"
+  matched nothing. Ranking by the number of distinct matching terms fixed it.
+- Rivaroxaban's boxed warning says "XARELTO" and never "rivaroxaban", so neither leg found it from
+  the generic name. The full-text column now carries the drug's generic and brand names.
+- Bupropion has 18 labels in the index; one section of them filled a leg's whole candidate pool, so
+  its boxed warning never reached the fusion step. Each leg is now de-duplicated before fusion.
+- Generic passages ("the following reactions are discussed elsewhere") sit close to every question in
+  embedding space and crowded out the drug the question named. If the question names an indexed
+  drug, that drug's chunks now come first.
+- The distance threshold alone let 6 of 8 clinical-vocabulary off-topic questions through ("What
+  are the symptoms of type 2 diabetes?" is 0.25 from a liraglutide passage). Scope now also requires
+  that the question names a drug in the index.
+
+**Answers** (the full ask path on the same 100 questions):
 
 | check | result |
 |---|---|
-| cited the right drug | 50/50 = 100% |
-| answer contains the required terms | 43/50 = 86% |
-| every `[n]` citation points at a source that was shown | 43/50 = 86% |
-| all three at once | 36/50 = 72% |
+| cited the right drug | 84/84 = 100% |
+| answer contains the required terms | 74/84 = 88% |
+| every `[n]` citation points at a source that was shown | 72/84 = 86% |
+| all three at once | 64/84 = 76% |
 | in-scope questions wrongly refused | 0 |
-| off-topic questions refused before the model | 8/8 = 100% |
-| latency p50 / p95 | 2.2 s / 3.2 s |
-| tokens per answer, prompt / completion (mean) | 1,569 / 67 |
+| off-topic questions refused before the model | 16/16 = 100% |
+| latency p50 / p95 | 2.2 s / 3.7 s |
+| tokens per answer, prompt / completion (mean) | 1,559 / 85 |
 
-Retrieval and scope are not the bottleneck; the 3B model is. Its failures are of two kinds: it
+**Faithfulness** (a judge model reads each cited sentence next to the source it cites; `make eval-faith`):
+
+| | result |
+|---|---|
+| sentences in the 84 answers | 181 |
+| sentences carrying a `[n]` citation | 99 |
+| cited sentences the judge finds supported by their source | 77/99 = 78% |
+| sentences with no citation at all | 82/181 = 45% |
+| judge agreement with 29 hand-labelled pairs | 23/29 = 79% |
+
+The judge is `llama3.2` too, and it is only trusted as far as that last row. Its first prompt agreed
+with the hand labels 13 of 29 times, calling verbatim quotes "adds a fact"; asking it to quote the
+supporting span first, and discarding any verdict whose quote is not actually in the source, brought it
+to 23 of 29. The remaining disagreements are the judge accepting a sentence whose facts are true of
+the drug but absent from the specific chunk cited. So the 78% is a floor with a known-imperfect ruler,
+and the 45% uncited is the number that matters more: a 3B model, told to end every sentence with a
+citation, does so for about half of them.
+
+Retrieval and scope are no longer the bottleneck; the model is. Its failures are of three kinds: it
 paraphrases past the required word ("suicidal thoughts and behaviours" becomes "mental health risks"),
-and it drops the `[n]` markers or cites the label's own section numbers instead. Tightening the
-prompt moved valid citations from 41 to 43 of 50. The next step is not more prompt work; it is the
-hosted-model rows on the roadmap, which the provider switch already supports.
+it drops the `[n]` markers or cites the label's own section numbers, and it occasionally attaches a
+true fact to the wrong source. The next step is not more prompt work; it is the hosted-model rows on
+the roadmap, which the provider switch already supports.
 
 **Extraction** (15 randomly sampled labels per section):
 
@@ -138,10 +169,10 @@ answered with truncated JSON; the output cap that ended it exists because an ear
 interaction and warning extractions failed on shape alone. See [`eval/README.md`](eval/README.md) for
 exactly what these metrics can and cannot prove.
 
-**Caveat that matters:** 58 questions and 15 labels per section are enough to catch the failures
+**Caveat that matters:** 100 questions and 15 labels per section are enough to catch the failures
 described above and to show that extraction does not invent content. They are not enough to quote as
-general accuracy figures, and the scope threshold was set on this same question set. The harness is
-built so the sets can grow without changing any code.
+general accuracy figures, the scope threshold was set on this same question set, and the judge was
+validated on 29 pairs. The harness is built so the sets can grow without changing any code.
 
 ## How it works
 
@@ -150,10 +181,10 @@ openFDA label API ──► ingest: split by label section ──► bge-small e
                       (boxed warning, contraindications,      384-dim, local        + pgvector (HNSW)
                        adverse reactions, interactions, …)                          + tsvector (GIN)
 
-question ──► dense top-50 ─┐
-         └─► full-text top-50 ─┴─► reciprocal rank fusion ──► one chunk per (drug, section) ──► top-5
+question ──► dense top-50 (deduped) ─┐
+         └─► full-text top-50 (deduped) ─┴─► reciprocal rank fusion ──► named drug first ──► top-5
                                                                                                  │
-                              closest chunk too far? ──► refuse, model never called ◄────────────┤
+          too far, or no indexed drug named? ──► refuse, model never called ◄────────────────────┤
                                                                                                  ▼
                                                      numbered sources ──► LLM ──► answer with [n] citations
                                                                                   + fixed safety footer
@@ -165,9 +196,10 @@ CLI · HTTP API (FastAPI, /docs) · web page  ──► all call the same answer
 
 Three guardrails, in order:
 
-1. **Scope check before the model.** If the closest retrieved chunk is further than a cosine-distance
-   threshold, the question is out of scope and the system says so. Cheaper and more predictable than
-   asking the model to decline.
+1. **Scope check before the model.** Two conditions, both deterministic: the closest retrieved chunk
+   is within a cosine-distance threshold, and the question names a drug that is in the index. Fail
+   either and the system says so without calling the model. Cheaper and more predictable than asking
+   the model to decline.
 2. **Closed-book prompt.** The model sees only the numbered sources and must cite every claim.
    It is told to quote the label rather than recommend anything for a specific person.
 3. **Fixed footer.** Every answer ends with the same not-medical-advice sentence, added in code, not by
@@ -197,10 +229,11 @@ make api                             # http://localhost:8000  (web page) and /do
 Every number in this README comes from a command below. Run them and compare.
 
 ```bash
-make test                            # 39 unit tests, no database or model needed, under 2 s
+make test                            # 46 unit tests, no database or model needed, under 3 s
 make check-questions                 # every eval question verified against the indexed label text
-make eval                            # retrieval recall@5 for all three configurations
+make eval                            # retrieval recall@5 for all four configurations
 make eval-answer                     # full ask path: citations, required terms, refusals, latency
+make eval-faith                      # judge each cited sentence against its source; validates the judge first
 make eval-extract N=15 SECTION=contraindications     # also drug_interactions, warnings_and_cautions
 ```
 
@@ -259,10 +292,12 @@ labellens/
   api.py           FastAPI: POST /ask, POST /extract, GET /health, generated docs at /docs
   static/index.html  the web page; plain HTML + fetch(), served by the API
 eval/
-  questions.jsonl        58 questions: 50 in scope, 8 off-topic for the refusal path
+  questions.jsonl        100 questions: 84 in scope, 16 off-topic for the refusal path
   check_questions.py     verifies every question against the indexed label text; CI runs it first
   run_eval.py            recall@5 per retrieval configuration; --min-recall is the CI gate
   run_answer_eval.py     end-to-end: right drug cited, required terms present, citations valid, refusals, latency
+  run_faithfulness.py    judge model on each cited sentence vs its source; validated against judge_labels.jsonl
+  judge_labels.jsonl     29 hand-labelled (sentence, source) pairs the judge is scored against
   run_extract_eval.py    extraction grounding and coverage on sampled labels, per section
   scoring.py             deterministic token-overlap scorer
 sql/schema.sql           tables, HNSW and GIN indexes
@@ -295,10 +330,17 @@ number of distinct question terms a chunk contains, then by density, fixed both.
 part of the indexed text so "boxed warning" finds boxed-warning chunks, whose text starts with
 "WARNING:" and never contains the word "boxed".
 
-**The scope threshold was measured, not guessed.** On the 58-question set the nearest chunk for an
-in-scope question is never further than 0.32 cosine distance, and for an off-topic question never
-nearer than 0.39. The threshold is 0.35. The first value, 0.55, let 7 of 8 off-topic questions through;
-the eval caught it the day the off-topic questions were added.
+**Scope is two signals, both deterministic.** The nearest chunk must be within 0.35 cosine distance
+(measured: in-scope questions never exceed 0.32, general off-topic ones never come under 0.39), and
+the question must name a drug that is in the index, matched against the generic and brand names of the
+retrieved chunks with salt and dosage-form words ignored. The distance check alone let 7 of 8
+general and 6 of 8 clinical-vocabulary off-topic questions through at different points; each was
+caught the day those questions were added. The cost is a product rule: a question has to name its
+drug. "Which drugs carry a suicidality boxed warning?" is refused, and the refusal says why.
+
+**The named drug's chunks come first.** Once retrieval knows which drug the question is about, every
+chunk of that drug outranks everything else, in fused order. This is what turned 82/100 into 97/100:
+without it, generic passages that sit close to every question in embedding space filled the top-5.
 
 **One chunk per (drug, section).** Generic drugs have many manufacturers and nearly identical labels.
 Without dedupe the top-5 was the same paragraph five times, and the eval showed it immediately.
@@ -341,7 +383,7 @@ them there. The gap is everything a team needs around the answer:
   label and which section. In a regulated setting "a web page" is not a citable source; the current
   Prescribing Information is.
 - *Reproducible and testable.* Ask a chatbot the same question next week and the sources, the answer
-  and the wording change. Here the same 58 questions run on every commit and produce the same recall
+  and the wording change. Here the same 100 questions run on every commit and produce the same recall
   number, so a change that breaks retrieval fails CI instead of being noticed by a user.
 - *Data stays in-house.* The question often carries context (a patient's other medicines, a renal
   value). Many pharma and hospital IT policies do not allow that text to leave the organisation.
@@ -405,36 +447,41 @@ front end on an untested service.
 
 **Why does CI index only the eval drugs?**
 Embedding 2,000 labels on a CI runner would take long enough that nobody would wait for it. The gate
-indexes the ~40 drugs the questions name (about 1,600 chunks, a few minutes), verifies every question
-against the label text, and fails if hybrid recall@5 drops below 90%. The headline numbers come from
-the full index and are reproduced with `make eval`.
+indexes the ~60 drugs the questions name (about 2,900 chunks, a few minutes), verifies every question
+against the label text, and fails if recall@5 of the final configuration drops below 90%. The headline
+numbers come from the full index and are reproduced with `make eval`.
 
 ## Limitations
 
 - US labels only. The EU equivalent (SmPC) has a different structure and is not indexed.
 - openFDA mirrors labels with some delay; a very recent label change may not be reflected.
-- The scope check is a single distance threshold. It separates the current question set cleanly, but
-  an off-topic question that happens to use clinical vocabulary ("what is the boiling point of
-  ethanol" came within 0.04 of it) could pass. A second signal is on the roadmap.
+- Scope requires the question to name an indexed drug. General questions across drugs are refused,
+  and a question that names a drug for an unrelated reason ("how much caffeine is in coffee" names
+  caffeine, which is in butalbital combinations) is answered from that label.
+- The three retrieval misses are all "right drug, wrong section": nothing yet maps "boxed warning" in
+  a question to the boxed-warning section when another section of the same drug scores higher.
+- The faithfulness judge is a 3B model validated on 29 hand-labelled pairs at 79% agreement. Its
+  number is indicative, not authoritative, until a stronger judge or more labels replace it.
 - `must_mention` checks that the answer contains the right words; it does not prove the sentence
-  around them is correct. A judged faithfulness score is the next step.
+  around them is correct. That is what the judged faithfulness number is for, with the caveat above.
 - Extraction covers three sections. Others follow the same one-line pattern.
-- 58 questions and 15 labels per section are enough to catch the failures described here, not enough to
-  quote as general accuracy figures. See the caveat under Results.
+- 100 questions and 15 labels per section are enough to catch the failures described here, not enough
+  to quote as general accuracy figures. See the caveat under Results.
 
 ## Roadmap
 
 In order of what the evaluation says matters most:
 
-1. **Judged faithfulness.** The answer eval checks words; a judge model comparing each cited sentence
-   with its cited chunk would score meaning. Its rubric would live in the repo and be evaluated itself
-   on a hand-labelled sample before its number is trusted.
-2. **Question set to 100**, with more questions per section and more off-topic questions that use
-   clinical vocabulary, which is where the distance threshold is weakest.
-3. **Hosted-model rows.** Same 58 questions on Claude and on an OpenAI model, with cost per query, next
-   to the local 3B row. The switch exists; the table does not yet.
-4. **Second scope signal**, for example requiring at least one lexical match on a drug name or
-   section term, to back up the distance threshold.
+1. **Hosted-model rows.** Same 100 questions on Claude and on an OpenAI model, with cost per query,
+   next to the local 3B row: answer checks, uncited-sentence rate and judged faithfulness. The switch
+   exists; the table does not yet. A stronger judge comes from the same switch.
+2. **Section intent.** When a question says "boxed warning" or "contraindications", prefer that
+   section of the named drug. This is the only kind of retrieval miss left.
+3. **Drug and section in the embedded text.** Prepending "rivaroxaban (Xarelto), boxed warning" to
+   each chunk before embedding would give the dense leg what the full-text leg now has. Costs a
+   re-embedding run; measured before it is kept.
+4. **More judge labels.** 29 pairs validate the judge; 100 would let the faithfulness number carry a
+   confidence interval.
 5. **Extraction for dosage and renal adjustment**, where the output is numeric and can be checked
    exactly.
 6. **A deployed instance** behind the existing API, once a hosted embedding store is chosen.
